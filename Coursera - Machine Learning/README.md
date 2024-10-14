@@ -1,0 +1,1 @@
+Stanford University Machine Learning Course taught by Andrew Ng on Coursera. Solutions taken from `https://github.com/Jeremy123W/Machine-Learning-Andrew-Ng-Programming-Exercises/`
