@@ -1,13 +1,16 @@
+import logging
 import operator
 from typing import Annotated, TypedDict
 
 from dotenv import load_dotenv
-from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
+from langchain_tavily import TavilySearch
 from langgraph.graph import END, StateGraph
 
 _ = load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
 
 
 class AgentState(TypedDict):
@@ -16,6 +19,7 @@ class AgentState(TypedDict):
 
 class Agent:
     def __init__(self, model, tools, system=""):
+        logging.info("Initializing agent")
         self.system = system
         graph = StateGraph(AgentState)
         graph.add_node("llm", self.call_openai)
@@ -29,11 +33,15 @@ class Agent:
         self.tools = {t.name: t for t in tools}
         self.model = model.bind_tools(tools)
 
+    def __call__(self, messages):
+        return self.graph.invoke({"messages": messages})
+
     def exists_action(self, state: AgentState):
         result = state["messages"][-1]
         return len(result.tool_calls) > 0
 
     def call_openai(self, state: AgentState):
+        logging.info("Calling LLM")
         messages = state["messages"]
         if self.system:
             messages = [SystemMessage(content=self.system)] + messages
@@ -41,11 +49,12 @@ class Agent:
         return {"messages": [message]}
 
     def take_action(self, state: AgentState):
+        logging.info("Taking action")
         tool_calls = state["messages"][-1].tool_calls
         results = []
         for t in tool_calls:
             print(f"Calling: {t}")
-            if not t["name"] in self.tools:  # check for bad tool name from LLM
+            if t["name"] not in self.tools:  # check for bad tool name from LLM
                 print("\n ....bad tool name....")
                 result = "bad tool name, retry"  # instruct LLM to retry if bad
             else:
@@ -65,9 +74,12 @@ If you need to look up some information before asking a follow up question, you 
 
 if __name__ == "__main__":
     model = ChatOpenAI(model="gpt-4o-mini")
-    tool = TavilySearchResults(max_results=2)
+    tool = TavilySearch(max_results=2)
     abot = Agent(model, [tool], system=prompt)
     messages = [HumanMessage(content="What is the weather in SF and LA?")]
-    result = abot.graph.invoke({"messages": messages})
-    print(result)
+    messages = [HumanMessage(content="How are you?")]
+    messages = [HumanMessage(content="What is the weather in Damascus?")]
+
+    result = abot(messages)
+    # print(result)
     print(result["messages"][-1].content)
